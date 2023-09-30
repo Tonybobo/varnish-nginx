@@ -1,0 +1,1 @@
+- Build docker image and upload to AWS ECR

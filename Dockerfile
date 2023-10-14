@@ -1,49 +1,28 @@
-# FROM varnish:7.4.1-alpine
-# USER 0
-# RUN apk update; \
-#     apk upgrade; \
-#     apk add  nginx vim openrc;
+FROM varnish:7.4.1-alpine
 
-# COPY ./varnish/default.vcl /etc/varnish/
+ARG ENV_NAME
 
-# COPY ./varnish/varnish.service /lib/systemd/system/varnish.service
+USER 0
 
-# COPY ./nginx/nginx.conf /etc/nginx/conf.d/default.conf
-
-# COPY ./nginx/default.conf /etc/nginx/sites-available/default.conf
-
-# ADD docker-entrypoint.sh /etc/docker/docker-entrypoint.sh
-
-# RUN chmod +x /etc/docker/docker-entrypoint.sh
-# EXPOSE 80 
-
-# ENTRYPOINT [ "sh" , "/etc/docker/docker-entrypoint.sh" ]
-
-FROM nginx:alpine
+LABEL key="value"
 RUN apk update; \
-    apk upgrade; \
-    apk add vim openrc;
-COPY ./nginx/default.conf /etc/nginx/conf.d/
+    apk --no-cache add bash curl nginx vim openrc supervisor;
 
-ENV VCL_DIR='/etc/varnish' \
-    VCL_FILE='default.vcl' \
-    VARNISH_CACHE_SIZE=256m \
-    VARNISH_PORT=80
+COPY ./varnish/${ENV_NAME}/default.vcl /etc/varnish/
 
-RUN apk add --update varnish && rm -rf /var/cache/apk/*
+COPY ./nginx/${ENV_NAME}/default.conf /etc/nginx/http.d/default.conf
 
-RUN openrc
+RUN ln -sf /dev/stdout /var/log/nginx/access.log && \
+    ln -sf /dev/stderr /var/log/nginx/error.log
+
+COPY ./nginx/start.sh /etc/nginx/
+
+RUN ["chmod" , "+x" , "/etc/nginx/start.sh"]
 
 RUN mkdir /run/openrc && touch /run/openrc/softlevel
 
-COPY entrypoint.sh /usr/local/bin/
+COPY config/${ENV_NAME}/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-RUN chmod u+x,g+x /usr/local/bin/entrypoint.sh\
-  && ln -s /usr/local/bin/entrypoint.sh / # backwards compat
+EXPOSE 6081
 
-COPY ./varnish/default.vcl $VCL_DIR/$VCL_FILE
-
-EXPOSE $VARNISH_PORT 
-CMD ["nginx", "-g", "daemon off;"]
-ENTRYPOINT ["entrypoint.sh"]
-
+CMD [ "/usr/bin/supervisord","-c" , "/etc/supervisor/conf.d/supervisord.conf"]
